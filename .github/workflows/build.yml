@@ -11,23 +11,64 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        goos: [darwin, windows]
-        goarch: [amd64, arm64]
+        os: [darwin, windows]
+        arch: [amd64, arm64]
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - name: Checkout repo
+        uses: actions/checkout@v3
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v4
         with:
           go-version: '1.23'
 
-      - name: Build binary
+      - name: Build Go binary for ${{ matrix.os }}
         run: |
-          GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} go build -o hello-${{ matrix.goos }}-${{ matrix.goarch }} main.go
+          GOOS=${{ matrix.os }} GOARCH=${{ matrix.arch }} go build -o hello-${{ matrix.os }}-${{ matrix.goarch }} main.go
 
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+      - name: Create macOS .app bundle (darwin only)
+        if: matrix.os == 'darwin'
+        run: |
+          mkdir -p HelloWorld.app/Contents/MacOS
+          cp hello-${{ matrix.os }}-${{ matrix.goarch }} HelloWorld.app/Contents/MacOS/HelloWorld
+          # Create minimal Info.plist for macOS app
+          cat > HelloWorld.app/Contents/Info.plist <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>CFBundleExecutable</key>
+            <string>HelloWorld</string>
+            <key>CFBundleIdentifier</key>
+            <string>com.example.helloworld</string>
+            <key>CFBundleName</key>
+            <string>HelloWorld</string>
+            <key>CFBundleVersion</key>
+            <string>1.0</string>
+            <key>CFBundlePackageType</key>
+            <string>APPL</string>
+          </dict>
+          </plist>
+          EOF
+
+      # Optional: Code sign the app bundle (replace placeholders with secrets/certs)
+      #- name: Code sign macOS app (optional)
+      #  if: matrix.os == 'darwin' && env.CODESIGN_IDENTITY
+      #  env:
+      #    CODESIGN_IDENTITY: ${{ secrets.CODESIGN_IDENTITY }}
+      #  run: |
+      #    codesign --deep --force --verbose --sign "$CODESIGN_IDENTITY" HelloWorld.app
+
+      - name: Upload Windows executable artifact
+        if: matrix.os == 'windows'
+        uses: actions/upload-artifact@v3
         with:
-          name: hello-${{ matrix.goos }}-${{ matrix.goarch }}
-          path: hello-${{ matrix.goos }}-${{ matrix.goarch }}
+          name: hello-windows-exe
+          path: hello-windows.exe
+
+      - name: Upload macOS .app artifact
+        if: matrix.os == 'darwin'
+        uses: actions/upload-artifact@v3
+        with:
+          name: HelloWorld-macOS-app
+          path: HelloWorld.app
